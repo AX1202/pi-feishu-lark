@@ -357,6 +357,12 @@ class ConversationManager {
       resourceLoader: loader,
     });
 
+    // SDK-created sessions build the extension/tool registry in the constructor,
+    // but extension lifecycle hooks such as `session_start` only run after
+    // `bindExtensions()`. pi-memory opens its SQLite store during session_start;
+    // without this, memory_* tools exist but return "Memory store not initialized".
+    await session.bindExtensions({});
+
     if (session.sessionFile && this.state.sessions[key] !== session.sessionFile) {
       this.state.sessions[key] = session.sessionFile;
       writeJson(STATE_PATH, this.state);
