@@ -61,9 +61,10 @@ Open a DM or group with your bot in Feishu/Lark and send a message. Pi replies i
 | Command / 命令 | Description / 说明 |
 |---------|-------------|
 | `/feishu setup` | Bilingual setup wizard / 中英双语配置向导 |
-| `/feishu start` | Start the bridge / 启动桥接 |
-| `/feishu stop` | Stop the bridge / 停止桥接 |
-| `/feishu status` | Show connection status and config / 查看连接状态与配置 |
+| `/feishu start` or `/feishu connect` | Start the single Feishu gateway / 启动单实例飞书 gateway |
+| `/feishu stop` or `/feishu disconnect` | Stop the gateway if this Pi process owns it / 停止当前进程拥有的 gateway |
+| `/feishu takeover` | Force this Pi process to become the gateway owner / 强制当前 Pi 进程接管 gateway |
+| `/feishu status` | Show connection, owner and config / 查看连接、gateway owner 和配置 |
 | `/feishu autostart on\|off` | Enable/disable auto-start / 开启/关闭自动启动 |
 | `/feishu debug` | Show last 20 debug log lines / 显示最近 20 条调试日志 |
 | `/feishu reset` | Clear config and mappings (keeps session history) / 清除配置和会话映射（保留会话历史） |
@@ -89,6 +90,7 @@ Send these to the bot in Feishu/Lark / 在飞书/Lark 中发送给机器人:
 - **Image attachments** — PNG, JPEG, WebP (sent to Pi if model supports images) / 图片附件，支持 PNG/JPEG/WebP（模型支持图片时发送给 Pi）
 - **Text/code file attachments** — common source files, logs, JSON, CSV, Markdown, etc. / 文本/代码文件附件
 - **Per-conversation model selection** — via `/model` interactive card / 每个对话独立选择模型
+- **Single gateway ownership** — only one local Pi process connects to Feishu/Lark at a time / 单实例 gateway，避免多个本地 Pi 进程同时抢消息
 - **Message deduplication** — 30s window / 30 秒消息去重
 - **Debug log** — at `~/.pi/agent/feishu/debug.log` / 调试日志
 - **Auto-start** — configurable, on by default / 可配置的自动启动，默认开启
@@ -119,6 +121,7 @@ Config is saved to `~/.pi/agent/feishu/config.json`. Can also use environment va
 | `~/.pi/agent/feishu/config.json` | Bot credentials and settings / 机器人凭证与设置 |
 | `~/.pi/agent/feishu/state.json` | Conversation-to-session mappings / 会话映射 |
 | `~/.pi/agent/feishu/debug.log` | Debug event log / 调试事件日志 |
+| `~/.pi/agent/locks.json` | Gateway ownership lock / gateway owner 锁 |
 | `~/.pi/agent/sessions/` | Pi session files (one per Feishu conversation) / Pi 会话文件（每个飞书对话一个） |
 
 ---

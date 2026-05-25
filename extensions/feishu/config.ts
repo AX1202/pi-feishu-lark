@@ -7,6 +7,7 @@ export const ROOT_DIR = join(homedir(), ".pi", "agent", "feishu");
 export const CONFIG_PATH = join(ROOT_DIR, "config.json");
 export const STATE_PATH = join(ROOT_DIR, "state.json");
 export const DEBUG_LOG_PATH = join(ROOT_DIR, "debug.log");
+export const DAEMON_LOG_PATH = join(ROOT_DIR, "daemon.log");
 export const DEDUPE_PATH = join(ROOT_DIR, "dedupe.json");
 export const CHILD_SESSION_ENV = "PI_FEISHU_CHILD_SESSION";
 

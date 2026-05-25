@@ -46,4 +46,4 @@ export type FeishuCardAction = {
   value: unknown;
 };
 
-export type FeishuStatus = "not configured" | "connecting" | "connected" | "bot unavailable" | "disconnected";
+export type FeishuStatus = "not configured" | "connecting" | "connected" | "owned" | "bot unavailable" | "disconnected";
