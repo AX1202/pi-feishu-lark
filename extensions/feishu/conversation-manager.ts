@@ -14,9 +14,15 @@ import { CHILD_SESSION_ENV, ensureRoot, readJson, STATE_PATH, writeJson } from "
 import { debugLog } from "./debug.js";
 import type { FeishuState } from "./types.js";
 
+type ActiveRun = {
+  session: AgentSession;
+  stopped: boolean;
+};
+
 export class ConversationManager {
   private readonly sessions = new Map<string, Promise<AgentSession>>();
   private readonly queues = new Map<string, Promise<void>>();
+  private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly authStorage = AuthStorage.create();
   private readonly modelRegistry = ModelRegistry.create(this.authStorage);
   private defaultProvider: string | undefined;
@@ -61,16 +67,28 @@ export class ConversationManager {
     const next = previous.then(async () => {
       debugLog("feishu.prompt.start", { key, textLength: userText.length, imageCount: images.length });
       const session = await this.getSession(key);
+      const run: ActiveRun = { session, stopped: false };
+      this.activeRuns.set(key, run);
       this.bridge?.beginFeishuInput(session.sessionId);
       try {
-        await withTimeout(
-          session.prompt(userText, images.length ? { images } : undefined),
-          180_000,
-          "Pi 模型处理超时，请稍后重试；如果是图片消息，可以先切换到明确支持图片的模型。",
-        );
+        try {
+          await withTimeout(
+            session.prompt(userText, images.length ? { images } : undefined),
+            180_000,
+            "Pi 模型处理超时，请稍后重试；如果是图片消息，可以先切换到明确支持图片的模型。",
+          );
+        } catch (error) {
+          if (run.stopped) {
+            debugLog("feishu.prompt.stopped", { key });
+            return;
+          }
+          throw error;
+        }
       } finally {
+        if (this.activeRuns.get(key) === run) this.activeRuns.delete(key);
         this.bridge?.endFeishuInput(session.sessionId);
       }
+      if (run.stopped) return;
       const answer = extractLastAssistantText(session);
       debugLog("feishu.prompt.done", { key, answerLength: answer.length });
       await onReply(answer || "No response.");
@@ -80,6 +98,25 @@ export class ConversationManager {
     });
     this.queues.set(key, next);
     await next;
+  }
+
+  async stopConversation(key: string, onReply: (text: string) => Promise<void>) {
+    const active = this.activeRuns.get(key);
+    if (!active) {
+      await onReply("当前没有进行中的处理。");
+      return;
+    }
+
+    active.stopped = true;
+    try {
+      await active.session.abort();
+      debugLog("feishu.prompt.abort", { key });
+      await onReply("已停止当前处理。");
+    } catch (error) {
+      active.stopped = false;
+      debugLog("feishu.prompt.abort_error", { key, error: error instanceof Error ? error.message : String(error) });
+      await onReply("停止失败，请重试。");
+    }
   }
 
   async newConversation(key: string, onReply: (text: string) => Promise<void>) {

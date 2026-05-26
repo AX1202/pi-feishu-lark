@@ -127,6 +127,12 @@ export default function feishuExtension(pi: ExtensionAPI) {
       updateStatus(loadConfig() ? "owned" : "not configured");
     });
     transport = new FeishuTransport(cfg, (msg) => messageHandler.handle(msg), async (action) => {
+      const copy = parseCopyMarkdownActionValue(action.value);
+      if (copy) {
+        const source = transport?.getMarkdownCopySource(copy.copySourceId);
+        await transport?.replyPlainText(action.messageId, source || "MD 原文已过期，请重新生成卡片。");
+        return;
+      }
       const selected = parseModelActionValue(action.value);
       if (!selected) return;
       await conversations.selectModel(selected.key, selected.provider, selected.modelId, async (reply) => {
@@ -399,6 +405,14 @@ export default function feishuExtension(pi: ExtensionAPI) {
     await stop();
     clearStatus();
   });
+}
+
+function parseCopyMarkdownActionValue(value: unknown): { copySourceId: string } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as any;
+  if (raw.action !== "pi_feishu_copy_markdown") return undefined;
+  if (typeof raw.copySourceId !== "string" || !raw.copySourceId) return undefined;
+  return { copySourceId: raw.copySourceId };
 }
 
 async function withDaemonSpawnLock<T>(fn: () => Promise<T>): Promise<T> {

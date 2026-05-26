@@ -134,6 +134,13 @@ export class FeishuMessageHandler {
       return true;
     }
 
+    if (command === "stop") {
+      await this.conversations.stopConversation(key, async (reply) => {
+        await transport.replyText(msg.messageId, reply);
+      });
+      return true;
+    }
+
     return false;
   }
 

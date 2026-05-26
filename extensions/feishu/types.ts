@@ -71,4 +71,8 @@ export type FeishuCardAction = {
   value: unknown;
 };
 
+export type FeishuCopyMarkdownAction = {
+  copySourceId: string;
+};
+
 export type FeishuStatus = "not configured" | "connecting" | "connected" | "owned" | "bot unavailable" | "disconnected";

@@ -69,10 +69,11 @@ export function parseMessageInput(msg: FeishuMessage, botOpenId?: string): { tex
   return { text: msg.msgType === "text" ? msg.content : `[${msg.msgType}]`, attachments };
 }
 
-export function parseBotCommand(text: string): "new" | "model" | undefined {
+export function parseBotCommand(text: string): "new" | "model" | "stop" | undefined {
   const normalized = text.trim().replace(/\s+/g, " ");
   if (normalized === "/new") return "new";
   if (normalized === "/model") return "model";
+  if (normalized === "/stop") return "stop";
   return undefined;
 }
 

@@ -1,5 +1,8 @@
 import type { FeishuCardAction, FeishuConfig, FeishuMessage } from "./types.js";
 import { debugLog } from "./debug.js";
+import { buildMarkdownCardParts, buildPostMessages, chooseMessageMode } from "./rich-text.js";
+
+const TEXT_CHUNK_MAX_BYTES = 120 * 1024;
 
 export class BotUnavailableError extends Error {
   constructor(message: string) {
@@ -14,6 +17,9 @@ export class FeishuTransport {
   private running = false;
   private botOpenId: string | undefined;
   private readonly chatModeCache = new Map<string, "p2p" | "group" | "topic">();
+  private readonly markdownCopySources = new Map<string, string>();
+  private readonly markdownCopySourceOrder: string[] = [];
+  private markdownCopySeq = 0;
 
   constructor(
     private readonly config: FeishuConfig,
@@ -184,8 +190,28 @@ export class FeishuTransport {
   }
 
   async replyText(messageId: string, text: string) {
+    const mode = chooseMessageMode(text);
+    if (mode === "interactive") {
+      await this.replyMarkdownCard(messageId, text);
+      return;
+    }
+    if (mode === "post") {
+      await this.replyPost(messageId, text);
+      return;
+    }
     debugLog("feishu.reply.text", { messageId, length: text.length });
-    const chunks = splitText(text, 3500);
+    const chunks = splitText(text, TEXT_CHUNK_MAX_BYTES);
+    for (const chunk of chunks) {
+      await this.sdkClient.im.message.reply({
+        path: { message_id: messageId },
+        data: { msg_type: "text", content: JSON.stringify({ text: chunk }) },
+      });
+    }
+  }
+
+  async replyPlainText(messageId: string, text: string) {
+    debugLog("feishu.reply.plain_text", { messageId, length: text.length });
+    const chunks = splitText(text, TEXT_CHUNK_MAX_BYTES);
     for (const chunk of chunks) {
       await this.sdkClient.im.message.reply({
         path: { message_id: messageId },
@@ -195,8 +221,17 @@ export class FeishuTransport {
   }
 
   async sendText(chatId: string, text: string) {
+    const mode = chooseMessageMode(text);
+    if (mode === "interactive") {
+      await this.sendMarkdownCard(chatId, text);
+      return;
+    }
+    if (mode === "post") {
+      await this.sendPost(chatId, text);
+      return;
+    }
     debugLog("feishu.send.text", { chatId, length: text.length });
-    const chunks = splitText(text, 3500);
+    const chunks = splitText(text, TEXT_CHUNK_MAX_BYTES);
     for (const chunk of chunks) {
       await this.sdkClient.im.message.create({
         params: { receive_id_type: "chat_id" },
@@ -204,6 +239,81 @@ export class FeishuTransport {
           receive_id: chatId,
           msg_type: "text",
           content: JSON.stringify({ text: chunk }),
+        },
+      });
+    }
+  }
+
+  async replyMarkdownCard(messageId: string, text: string) {
+    debugLog("feishu.reply.markdown_card", { messageId, length: text.length });
+    for (const { card } of this.buildMarkdownCardPartsWithCopySources(text)) {
+      await this.sdkClient.im.message.reply({
+        path: { message_id: messageId },
+        data: { msg_type: "interactive", content: JSON.stringify(card) },
+      });
+    }
+  }
+
+  async sendMarkdownCard(chatId: string, text: string) {
+    debugLog("feishu.send.markdown_card", { chatId, length: text.length });
+    for (const { card } of this.buildMarkdownCardPartsWithCopySources(text)) {
+      await this.sdkClient.im.message.create({
+        params: { receive_id_type: "chat_id" },
+        data: {
+          receive_id: chatId,
+          msg_type: "interactive",
+          content: JSON.stringify(card),
+        },
+      });
+    }
+  }
+
+  getMarkdownCopySource(copySourceId: string) {
+    return this.markdownCopySources.get(copySourceId);
+  }
+
+  private buildMarkdownCardPartsWithCopySources(text: string) {
+    return buildMarkdownCardParts(text, this.config.language, () => this.createMarkdownCopySourceId())
+      .map((part) => {
+        const copySourceId = extractCopySourceId(part.card);
+        if (copySourceId) this.rememberMarkdownCopySource(copySourceId, part.markdown);
+        return part;
+      });
+  }
+
+  private rememberMarkdownCopySource(copySourceId: string, markdown: string) {
+    this.markdownCopySources.set(copySourceId, markdown);
+    this.markdownCopySourceOrder.push(copySourceId);
+    while (this.markdownCopySourceOrder.length > 200) {
+      const oldest = this.markdownCopySourceOrder.shift();
+      if (oldest) this.markdownCopySources.delete(oldest);
+    }
+  }
+
+  private createMarkdownCopySourceId() {
+    this.markdownCopySeq += 1;
+    return `${Date.now().toString(36)}-${this.markdownCopySeq.toString(36)}`;
+  }
+
+  async replyPost(messageId: string, text: string) {
+    debugLog("feishu.reply.post", { messageId, length: text.length });
+    for (const post of buildPostMessages(text, this.config.language)) {
+      await this.sdkClient.im.message.reply({
+        path: { message_id: messageId },
+        data: { msg_type: "post", content: JSON.stringify(post) },
+      });
+    }
+  }
+
+  async sendPost(chatId: string, text: string) {
+    debugLog("feishu.send.post", { chatId, length: text.length });
+    for (const post of buildPostMessages(text, this.config.language)) {
+      await this.sdkClient.im.message.create({
+        params: { receive_id_type: "chat_id" },
+        data: {
+          receive_id: chatId,
+          msg_type: "post",
+          content: JSON.stringify(post),
         },
       });
     }
@@ -251,15 +361,67 @@ export class FeishuTransport {
   }
 }
 
-function splitText(text: string, max: number) {
+function splitText(text: string, maxBytes: number) {
   const out: string[] = [];
   let rest = text.trim() || "(empty response)";
-  while (rest.length > max) {
-    out.push(rest.slice(0, max));
-    rest = rest.slice(max);
+  while (textPayloadSize(rest) > maxBytes) {
+    const cut = findCutIndexByBytes(rest, maxBytes);
+    out.push(rest.slice(0, cut));
+    rest = rest.slice(cut);
   }
   out.push(rest);
   return out;
+}
+
+function findCutIndexByBytes(text: string, maxBytes: number) {
+  let low = 1;
+  let high = text.length;
+  let best = 1;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const safeMid = avoidHalfSurrogate(text, mid);
+    if (safeMid > 0 && textPayloadSize(text.slice(0, safeMid)) <= maxBytes) {
+      best = safeMid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  const newline = text.lastIndexOf("\n", best);
+  if (newline > 0 && newline >= Math.floor(best * 0.6)) return newline + 1;
+  return Math.max(1, best);
+}
+
+function avoidHalfSurrogate(text: string, index: number) {
+  if (index <= 0 || index >= text.length) return index;
+  const prev = text.charCodeAt(index - 1);
+  if (prev >= 0xd800 && prev <= 0xdbff) return index - 1;
+  return index;
+}
+
+function byteSize(text: string) {
+  return Buffer.byteLength(text, "utf8");
+}
+
+function textPayloadSize(text: string) {
+  return byteSize(JSON.stringify({ text }));
+}
+
+function extractCopySourceId(card: object) {
+  const elements = (card as any)?.body?.elements;
+  if (!Array.isArray(elements)) return undefined;
+  for (const element of elements) {
+    const behaviors = element?.behaviors;
+    if (!Array.isArray(behaviors)) continue;
+    for (const behavior of behaviors) {
+      const value = behavior?.value;
+      if (value?.action === "pi_feishu_copy_markdown" && typeof value.copySourceId === "string") {
+        return value.copySourceId;
+      }
+    }
+  }
+  return undefined;
 }
 
 async function streamToBuffer(readable: NodeJS.ReadableStream): Promise<Buffer> {

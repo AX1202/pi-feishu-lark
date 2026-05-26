@@ -79,6 +79,7 @@ Send these to the bot in Feishu/Lark / 在飞书/Lark 中发送给机器人:
 |---------|-------------|
 | `/new` | Start a fresh Pi session for this conversation / 为此对话创建新 Pi 会话 |
 | `/model` | Show model selector card — tap to switch models / 显示模型选择卡片，点击切换模型 |
+| `/stop` | Stop the current running reply in this conversation / 停止当前对话中正在处理的回复 |
 
 ---
 
@@ -91,6 +92,7 @@ Send these to the bot in Feishu/Lark / 在飞书/Lark 中发送给机器人:
 - **Text/code file attachments** — common source files, logs, JSON, CSV, Markdown, etc. / 文本/代码文件附件
 - **Per-conversation model selection** — via `/model` interactive card / 每个对话独立选择模型
 - **Pi result bridge** — key results from Pi jobs created through Feishu are sent back to the originating chat/topic / 从飞书创建的 Pi 任务，关键结果回传到最初会话/话题
+- **Readable replies** — short replies use text, medium structured replies use rich text, complex Markdown uses JSON 2.0 interactive card(s) / 可读回复：短回复用普通文本，中等结构化回复用富文本，复杂 Markdown 用 JSON 2.0 交互卡片
 - **Single gateway ownership** — only one local Pi process connects to Feishu/Lark at a time / 单实例 gateway，避免多个本地 Pi 进程同时抢消息
 - **Message deduplication** — 30s window / 30 秒消息去重
 - **Debug log** — at `~/.pi/agent/feishu/debug.log` / 调试日志
@@ -130,8 +132,9 @@ Config is saved to `~/.pi/agent/feishu/config.json`. Can also use environment va
 
 ## Notes / 说明
 
-- Replies are plain text (Markdown cards and streaming are planned for a future version).
-  回复目前为纯文本（Markdown 卡片和流式更新计划后续版本加入）。
+- Short replies are sent as plain text. Medium structured replies are sent as rich text. Complex Markdown, tables, code blocks and long replies are sent as JSON 2.0 interactive Markdown cards.
+- Interactive Markdown cards are kept under 29KB. Longer replies are split into multiple cards with numbered titles.
+  短回复以普通文本发送；中等结构化回复以富文本发送；复杂 Markdown、表格、代码块和长回复会以交互式 Markdown 卡片发送。单张卡片控制在 29KB 以内，超长回复会拆成多张带序号的卡片。
 - `/feishu reset` clears config and mappings but keeps session history.
   `/feishu reset` 清除配置和映射，但保留会话历史。
 - Image attachments are skipped if the current model doesn't support image input.
