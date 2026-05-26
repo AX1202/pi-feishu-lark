@@ -28,8 +28,10 @@ export default function feishuExtension(pi: ExtensionAPI) {
   const messageHandler = new FeishuMessageHandler(conversations, () => transport, bridgeStore);
 
   const STATUS_KEY = "feishu-connection";
+  const STATUS_REFRESH_MS = 2_000;
   let uiRef: { setStatus?: (key: string, text: string | undefined) => void } | undefined;
   let lastStatusText: string | undefined;
+  let statusRefreshTimer: NodeJS.Timeout | undefined;
 
   function setStatusText(text: string | undefined) {
     if (lastStatusText === text) return;
@@ -40,10 +42,59 @@ export default function feishuExtension(pi: ExtensionAPI) {
   function updateStatus(status: FeishuStatus) {
     const cfg = loadConfig();
     const brand = cfg?.domain === "lark" ? "Lark" : "Feishu";
-    setStatusText(`${brand}: ${status}`);
+    setStatusText(statusText(brand, status));
+  }
+
+  function statusText(brand: "Feishu" | "Lark", status: FeishuStatus) {
+    const labels: Record<FeishuStatus, string> = {
+      "not configured": "未配置 / Not configured",
+      connecting: "连接中 / Connecting",
+      connected: "已连接 / Connected",
+      disconnected: "已断开 / Disconnected",
+      owned: "连接被占用 / In use by another process",
+      "bot unavailable": "机器人不可用 / Bot unavailable",
+    };
+    return `${brand}: ${labels[status]}`;
+  }
+
+  function refreshStatusFromState() {
+    const cfg = loadConfig();
+    const brand = cfg?.domain === "lark" ? "Lark" : "Feishu";
+    if (!cfg) {
+      setStatusText(statusText(brand, "not configured"));
+      return;
+    }
+    if (transport?.isRunning()) {
+      setStatusText(statusText(brand, "connected"));
+      return;
+    }
+    const owner = readGatewayOwner();
+    if (owner?.status === "connected") {
+      setStatusText(statusText(brand, "connected"));
+    } else if (owner?.status === "starting") {
+      setStatusText(statusText(brand, "connecting"));
+    } else if (owner) {
+      setStatusText(statusText(brand, "disconnected"));
+    } else {
+      setStatusText(statusText(brand, "disconnected"));
+    }
+  }
+
+  function startStatusRefresh() {
+    if (statusRefreshTimer) return;
+    refreshStatusFromState();
+    statusRefreshTimer = setInterval(refreshStatusFromState, STATUS_REFRESH_MS);
+    statusRefreshTimer.unref?.();
+  }
+
+  function stopStatusRefresh() {
+    if (!statusRefreshTimer) return;
+    clearInterval(statusRefreshTimer);
+    statusRefreshTimer = undefined;
   }
 
   function clearStatus() {
+    stopStatusRefresh();
     lastStatusText = undefined;
     uiRef?.setStatus?.(STATUS_KEY, undefined);
   }
@@ -213,19 +264,23 @@ export default function feishuExtension(pi: ExtensionAPI) {
             writeJson(CONFIG_PATH, configToStart);
             notifyDaemonStartResult(ctx, await startDaemon(false));
           }
+          refreshStatusFromState();
           return;
         }
         if (cmd === "start") {
           notifyDaemonStartResult(ctx, await startDaemon(false));
+          refreshStatusFromState();
           return;
         }
         if (cmd === "stop") {
           const result = await stopDaemon();
           if (result.status === "error") {
             ctx.ui.notify(`停止飞书连接失败：${result.error instanceof Error ? result.error.message : String(result.error)}\nOwner: ${formatOwner(result.owner)}`, "error");
+            refreshStatusFromState();
             return;
           }
           ctx.ui.notify(result.status === "none" ? "飞书连接未在运行。" : "飞书连接已停止。", "info");
+          refreshStatusFromState();
           return;
         }
         if (cmd === "restart") {
@@ -233,9 +288,11 @@ export default function feishuExtension(pi: ExtensionAPI) {
           if (result.status === "error") {
             const stopped = result.stopped;
             ctx.ui.notify(`飞书连接重启失败：${stopped.error instanceof Error ? stopped.error.message : String(stopped.error)}\nOwner: ${formatOwner(stopped.owner)}`, "error");
+            refreshStatusFromState();
             return;
           }
           ctx.ui.notify(`飞书连接已重启，最新代码和配置已生效。\nOwner: ${formatOwner(result.started.owner)}\nLog: ${DAEMON_LOG_PATH}`, "info");
+          refreshStatusFromState();
           return;
         }
         if (cmd === "reset") {
@@ -262,9 +319,11 @@ export default function feishuExtension(pi: ExtensionAPI) {
             "Feishu extension reset. Session history was kept. Run /feishu setup. / 飞书扩展已重置，会话历史已保留，请运行 /feishu setup。",
             "info",
           );
+          refreshStatusFromState();
           return;
         }
         if (cmd === "status") {
+          refreshStatusFromState();
           const cfg = loadConfig();
           const owner = gatewayLock?.owner || readGatewayOwner();
           ctx.ui.notify(
@@ -299,6 +358,7 @@ export default function feishuExtension(pi: ExtensionAPI) {
           cfg.autoStart = cfg.autoStart === false;
           writeJson(CONFIG_PATH, cfg);
           ctx.ui.notify(cfg.autoStart ? "飞书自动启动已开启。" : "飞书自动启动已关闭。", "info");
+          refreshStatusFromState();
           return;
         }
         ctx.ui.notify("可用命令：/feishu setup | start | stop | restart | status | debug | autostart | reset", "info");
@@ -312,26 +372,7 @@ export default function feishuExtension(pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     uiRef = ctx.ui as any;
-    if (lastStatusText) {
-      uiRef?.setStatus?.(STATUS_KEY, lastStatusText);
-      return;
-    }
-    if (transport?.isRunning()) {
-      updateStatus("connected");
-    } else if (!bootConfig) {
-      updateStatus("not configured");
-    } else {
-      const owner = readGatewayOwner();
-      if (owner?.status === "connected") {
-        setStatusText("Feishu: connected (background)");
-      } else if (owner) {
-        setStatusText(`Feishu: ${owner.status} (background)`);
-      } else if (bootConfig.autoStart === false) {
-        updateStatus("disconnected");
-      } else {
-        updateStatus("connecting");
-      }
-    }
+    startStatusRefresh();
   });
 
   if (bootConfig?.autoStart !== false) {
