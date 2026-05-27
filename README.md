@@ -2,7 +2,15 @@
 
 目前功能最强，最易用的 Pi 连接 飞书/Lark 的扩展包！！
 
-# 我的媒体平台 关注我第一时间了解最新AI工具
+<p align="center">
+  <a href="#zh">中文</a> · <a href="#en">English</a>
+</p>
+
+<a id="zh"></a>
+
+## 中文
+
+## 我的媒体平台 关注我第一时间了解最新AI工具
 
 全平台账号名称：AX阿煊
 
@@ -159,3 +167,67 @@ pi install git:github.com/AX1202/pi-feishu-lark
 `open`模式下：群里和话题里可直接回复，不需要 @，但还需手动在飞书开发者后台开启机器人“获取群组中所有消息”权限才能生效。
 
 ### 还没有实现后台服务开机自启动功能，目前需要电脑开机后手动启动一次 Pi agent 才能正常工作。启动后，Pi agent 无需前台运行，关闭后，仍可以在飞书/Lark 里对话。
+
+<a id="en"></a>
+
+## English
+
+Pi-feishu-lark is a bridge between Pi and Feishu/Lark for chat-based workflows.
+
+### Highlights
+
+- Create a Feishu/Lark bot quickly with QR-code setup
+- Keep separate Pi sessions for DMs, group chats, and group topics
+- Support attachments such as images, code files, and text files
+- Switch models inside Feishu/Lark
+- Show live Pi task status
+- Render Markdown replies
+- Keep Pi running in the background after the agent UI is closed
+
+### Quick Start
+
+1. Install:
+
+```bash
+pi install npm:pi-feishu-lark
+```
+
+2. Set up:
+
+```bash
+/feishu setup
+```
+
+3. Start the bridge:
+
+```bash
+/feishu start
+```
+
+4. Chat in Feishu/Lark.
+
+### Common Commands
+
+| Command | Meaning |
+| --- | --- |
+| `/new` | Start a new Pi session for the current chat |
+| `/model` | Open the model picker |
+| `/stop` | Stop the current reply generation |
+
+### Config
+
+| Variable | Meaning |
+| --- | --- |
+| `FEISHU_APP_ID` | Feishu/Lark app ID |
+| `FEISHU_APP_SECRET` | Feishu/Lark app secret |
+| `FEISHU_DOMAIN` | `feishu` or `lark` |
+| `FEISHU_GROUP_POLICY` | `open` or `mention` |
+| `FEISHU_LANGUAGE` | `zh` or `en` |
+| `FEISHU_REACT_EMOJI` | Reaction emoji |
+| `FEISHU_AUTO_START` | `1` or `0` |
+
+### Notes
+
+- Image understanding depends on the selected model.
+- `/feishu reset` clears config and mappings, but keeps session history.
+- Tasks created from TUI, CLI, or other channels will not be pushed to Feishu automatically.
