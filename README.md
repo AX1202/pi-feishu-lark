@@ -9,7 +9,8 @@
 <a id="zh"></a>
 
 ## 中文
- Pi Agent飞书交流反馈群：https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=57dvecbb-95d3-4d01-b689-6ebc3d17c867
+
+Pi Agent飞书交流反馈群：<https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=57dvecbb-95d3-4d01-b689-6ebc3d17c867>
 
 扩展有什么问题可以加群反馈。
 
@@ -74,6 +75,107 @@ pi install git:github.com/AX1202/pi-feishu-lark
 
 如果开启了自动启动，Pi 会话启动时会自动连上飞书/Lark。
 
+
+# Windows 上运行 Pi Agent 飞书插件配置方法
+
+## 解决方法
+
+### 1. 先安装 Git for Windows
+
+安装后一般会有这个文件：
+
+```text
+C:\Program Files\Git\bin\bash.exe
+```
+
+这个就是 Windows 上给 Pi 使用的 Bash 环境。
+
+---
+
+### 2. 配置 Pi 的 settings.json
+
+打开：
+
+```text
+C:\Users\你的用户名\.pi\agent\settings.json
+```
+
+在大括号里加这一行：
+
+```json
+"shellPath": "C:\\Program Files\\Git\\bin\\bash.exe"
+```
+
+注意：如果你原来文件里还有其他配置，不要删掉，只加这一行即可。
+
+这个配置主要是告诉 **Pi 主程序** 使用哪个 Bash。
+
+---
+
+### 3. 把 Git Bash 加到 Windows PATH
+
+有些插件会直接调用：
+
+```text
+bash
+```
+
+它不一定读取 Pi 的 `shellPath` 配置，所以还需要把 Git Bash 加到系统 PATH。
+
+在 PowerShell 里执行：
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  "Path",
+  [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\Program Files\Git\bin",
+  "User"
+)
+```
+
+---
+
+### 4. 重启 PowerShell
+
+执行完上面的命令后，要关闭 PowerShell，再重新打开。
+
+然后验证：
+
+```powershell
+where.exe bash
+```
+
+如果输出：
+
+```text
+C:\Program Files\Git\bin\bash.exe
+```
+
+说明修复成功。
+
+---
+
+### 5. 再运行 Pi
+
+```powershell
+pi
+```
+
+---
+
+## 总结
+
+最稳的配置是两个都做：
+
+```text
+settings.json 配置 shellPath
++
+Windows PATH 加入 C:\Program Files\Git\bin
+```
+
+前者给 Pi 主程序用，后者给插件或子进程直接调用 `bash` 用。
+
+
+
 ### 4. 开始聊天
 
 在飞书/Lark 里打开机器人，直接发消息即可。
@@ -130,7 +232,7 @@ pi install git:github.com/AX1202/pi-feishu-lark
 | `FEISHU_LANGUAGE`     | `zh` 或 `en`                   |
 | `FEISHU_REACT_EMOJI`  | 收到消息时的表情回应，默认 `THUMBSUP`      |
 | `FEISHU_AUTO_START`   | `1` 或 `0`                     |
-| `FEISHU_EXT_DEV`      | `1` 时显示本地开发标识 `DEV`      |
+| `FEISHU_EXT_DEV`      | `1` 时显示本地开发标识 `DEV`           |
 
 ***
 
@@ -196,42 +298,43 @@ Pi-feishu-lark is a bridge between Pi and Feishu/Lark for chat-based workflows.
 pi install npm:pi-feishu-lark
 ```
 
-2. Set up:
+1. Set up:
 
 ```bash
 /feishu setup
 ```
 
-3. Start the bridge:
+1. Start the bridge:
 
 ```bash
 /feishu start
 ```
 
-4. Chat in Feishu/Lark.
+1. Chat in Feishu/Lark.
 
 ### Common Commands
 
-| Command | Meaning |
-| --- | --- |
-| `/new` | Start a new Pi session for the current chat |
-| `/model` | Open the model picker |
-| `/stop` | Stop the current reply generation |
+| Command  | Meaning                                     |
+| -------- | ------------------------------------------- |
+| `/new`   | Start a new Pi session for the current chat |
+| `/model` | Open the model picker                       |
+| `/stop`  | Stop the current reply generation           |
 
 ### Config
 
-| Variable | Meaning |
-| --- | --- |
-| `FEISHU_APP_ID` | Feishu/Lark app ID |
-| `FEISHU_APP_SECRET` | Feishu/Lark app secret |
-| `FEISHU_DOMAIN` | `feishu` or `lark` |
-| `FEISHU_GROUP_POLICY` | `open` or `mention` |
-| `FEISHU_LANGUAGE` | `zh` or `en` |
-| `FEISHU_REACT_EMOJI` | Reaction emoji |
-| `FEISHU_AUTO_START` | `1` or `0` |
+| Variable              | Meaning                |
+| --------------------- | ---------------------- |
+| `FEISHU_APP_ID`       | Feishu/Lark app ID     |
+| `FEISHU_APP_SECRET`   | Feishu/Lark app secret |
+| `FEISHU_DOMAIN`       | `feishu` or `lark`     |
+| `FEISHU_GROUP_POLICY` | `open` or `mention`    |
+| `FEISHU_LANGUAGE`     | `zh` or `en`           |
+| `FEISHU_REACT_EMOJI`  | Reaction emoji         |
+| `FEISHU_AUTO_START`   | `1` or `0`             |
 
 ### Notes
 
 - Image understanding depends on the selected model.
 - `/feishu reset` clears config and mappings, but keeps session history.
 - Tasks created from TUI, CLI, or other channels will not be pushed to Feishu automatically.
+
