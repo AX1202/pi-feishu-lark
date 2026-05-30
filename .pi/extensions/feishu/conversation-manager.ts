@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import {
   AuthStorage,
@@ -46,6 +47,7 @@ export class ConversationManager {
     this.state = readJson<FeishuState>(STATE_PATH, { sessions: {} });
     this.state.sessions ||= {};
     this.state.models ||= {};
+    this.state.workspaces ||= {};
     this.loadSettingsDefault();
   }
 
@@ -187,6 +189,40 @@ export class ConversationManager {
     await next;
   }
 
+  getWorkspace(key: string) {
+    return this.state.workspaces?.[key] || this.cwd;
+  }
+
+  async switchWorkspace(key: string, workspaceInput: string | undefined, onReply: (text: string) => Promise<void>) {
+    if (!workspaceInput) {
+      const current = this.getWorkspace(key);
+      await onReply([
+        `当前工作区：${current}`,
+        "用法：/workspace /绝对路径",
+        "也支持：/workspace ~/your/project",
+      ].join("\n"));
+      return;
+    }
+
+    const previous = this.previousTurn(key);
+    const next = previous.then(async () => {
+      const workspace = resolveWorkspacePath(workspaceInput);
+      const cached = this.sessions.get(key);
+      if (cached) {
+        try { (await cached).dispose(); } catch {}
+      }
+      this.sessions.delete(key);
+      delete this.state.sessions[key];
+      this.state.workspaces![key] = workspace;
+      writeJson(STATE_PATH, this.state);
+      await onReply(`已切换到工作区：${workspace}\n下一条消息会在这个目录里创建新的 Pi 会话。`);
+    }).catch(async (error) => {
+      await onReply(error instanceof Error ? error.message : `Pi error: ${String(error)}`);
+    });
+    this.queues.set(key, next);
+    await next;
+  }
+
   getAvailableModels() {
     return this.modelRegistry.getAvailable().sort((a, b) => {
       const providerCmp = a.provider.localeCompare(b.provider);
@@ -222,7 +258,7 @@ export class ConversationManager {
     }
     this.sessions.clear();
     this.queues.clear();
-    this.state = { sessions: {}, models: {} };
+    this.state = { sessions: {}, models: {}, workspaces: {} };
   }
 
   private getSession(key: string): Promise<AgentSession> {
@@ -245,15 +281,17 @@ export class ConversationManager {
   }
 
   private async createSession(key: string): Promise<AgentSession> {
+    const workspaceCwd = this.getWorkspace(key);
+    ensureWorkspaceExists(workspaceCwd);
     const existingFile = this.state.sessions[key];
     const selected = this.state.models?.[key];
     const model = selected ? this.modelRegistry.find(selected.provider, selected.id) : undefined;
     const sessionManager = existingFile && existsSync(existingFile)
-      ? SessionManager.open(existingFile, undefined, this.cwd)
-      : SessionManager.create(this.cwd);
+      ? SessionManager.open(existingFile, undefined, workspaceCwd)
+      : SessionManager.create(workspaceCwd);
 
     const loader = new DefaultResourceLoader({
-      cwd: this.cwd,
+      cwd: workspaceCwd,
       agentDir: getAgentDir(),
       systemPromptOverride: (base) => {
         const extra = "You are replying through Feishu/Lark. Keep answers concise and readable in chat. Do not use markdown tables.";
@@ -271,7 +309,7 @@ export class ConversationManager {
     }
 
     const { session } = await createAgentSession({
-      cwd: this.cwd,
+      cwd: workspaceCwd,
       agentDir: getAgentDir(),
       authStorage: this.authStorage,
       modelRegistry: this.modelRegistry,
@@ -325,4 +363,40 @@ function extractLastAssistantText(session: AgentSession): string {
     }
   }
   return "";
+}
+
+function resolveWorkspacePath(input: string) {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    throw new Error("请在 /workspace 后面带上目录路径，例如：/workspace /Users/ax/project");
+  }
+
+  const expanded = trimmed === "~" || trimmed.startsWith("~/")
+    ? join(homedir(), trimmed.slice(2))
+    : trimmed;
+
+  if (!isAbsolute(expanded)) {
+    throw new Error("当前只支持绝对路径或 ~/ 开头的路径。");
+  }
+
+  const resolved = resolve(expanded);
+  ensureWorkspaceExists(resolved);
+  return realpathSync(resolved);
+}
+
+function ensureWorkspaceExists(path: string) {
+  if (!existsSync(path)) {
+    throw new Error(`工作区不存在：${path}`);
+  }
+
+  let stat;
+  try {
+    stat = statSync(path);
+  } catch {
+    throw new Error(`无法访问工作区：${path}`);
+  }
+
+  if (!stat.isDirectory()) {
+    throw new Error(`工作区不是目录：${path}`);
+  }
 }

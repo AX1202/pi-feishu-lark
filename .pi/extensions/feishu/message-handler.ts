@@ -119,14 +119,14 @@ export class FeishuMessageHandler {
     const transport = this.getTransport();
     if (!transport) return true;
 
-    if (command === "new") {
+    if (command.name === "new") {
       await this.conversations.newConversation(key, async (reply) => {
         await transport.replyText(msg.messageId, reply);
       });
       return true;
     }
 
-    if (command === "model") {
+    if (command.name === "model") {
       const models = this.conversations.getAvailableModels();
       if (!models.length) {
         await transport.replyText(msg.messageId, "当前没有可用模型。请先在 Pi 里完成模型登录或 API Key 配置。");
@@ -137,8 +137,15 @@ export class FeishuMessageHandler {
       return true;
     }
 
-    if (command === "stop") {
+    if (command.name === "stop") {
       await this.conversations.stopConversation(key, async (reply) => {
+        await transport.replyText(msg.messageId, reply);
+      });
+      return true;
+    }
+
+    if (command.name === "workspace") {
+      await this.conversations.switchWorkspace(key, command.path, async (reply) => {
         await transport.replyText(msg.messageId, reply);
       });
       return true;

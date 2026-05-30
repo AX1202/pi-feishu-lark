@@ -19,6 +19,7 @@ export type ModelSelection = {
 export type FeishuState = {
   sessions: Record<string, string>;
   models?: Record<string, ModelSelection>;
+  workspaces?: Record<string, string>;
 };
 
 export type FeishuRoute = {

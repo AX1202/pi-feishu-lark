@@ -195,6 +195,8 @@ Windows PATH 加入 C:\Program Files\Git\bin
 | `/new`   | 为当前会话新建一个 Pi 会话      |
 | `/model` | 打开模型选择卡片，切换当前会话使用的模型 |
 | `/stop`  | 停止当前这条回复的处理          |
+| `/workspace` | 查看当前会话绑定的工作区      |
+| `/workspace /path/to/project` | 把当前会话切换到指定工作区，下一条消息生效 |
 
 ***
 
@@ -254,6 +256,7 @@ Windows PATH 加入 C:\Program Files\Git\bin
 - 图片能不能被识别，取决于当前选中的模型是否支持图片输入。
 - `/feishu reset` 只会清掉配置和映射，不会删除会话历史。
 - 从 TUI、CLI 或其他渠道创建的任务，不会主动发到飞书。
+- `/workspace` 当前只支持绝对路径，或 `~/` 开头的路径。
 
 ***
 
@@ -337,4 +340,3 @@ pi install npm:pi-feishu-lark
 - Image understanding depends on the selected model.
 - `/feishu reset` clears config and mappings, but keeps session history.
 - Tasks created from TUI, CLI, or other channels will not be pushed to Feishu automatically.
-

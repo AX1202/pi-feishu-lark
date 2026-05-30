@@ -1,5 +1,11 @@
 import type { FeishuAttachment, FeishuMessage } from "./types.js";
 
+export type BotCommand =
+  | { name: "new" }
+  | { name: "model" }
+  | { name: "stop" }
+  | { name: "workspace"; path?: string };
+
 export function normalizeForDedupe(text: string) {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -72,11 +78,16 @@ export function parseMessageInput(msg: FeishuMessage, botOpenId?: string): { tex
   return { text: msg.msgType === "text" ? msg.content : `[${msg.msgType}]`, attachments };
 }
 
-export function parseBotCommand(text: string): "new" | "model" | "stop" | undefined {
-  const normalized = text.trim().replace(/\s+/g, " ");
-  if (normalized === "/new") return "new";
-  if (normalized === "/model") return "model";
-  if (normalized === "/stop") return "stop";
+export function parseBotCommand(text: string): BotCommand | undefined {
+  const trimmed = text.trim();
+  const normalized = trimmed.replace(/\s+/g, " ");
+  if (normalized === "/new") return { name: "new" };
+  if (normalized === "/model") return { name: "model" };
+  if (normalized === "/stop") return { name: "stop" };
+  const workspaceMatch = trimmed.match(/^\/workspace(?:\s+(.+))?$/s);
+  if (workspaceMatch) {
+    return { name: "workspace", path: workspaceMatch[1]?.trim() };
+  }
   return undefined;
 }
 
